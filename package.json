@@ -1,0 +1,57 @@
+{
+  "name": "sapekkho",
+  "version": "1.0.0",
+  "description": "A simple Bengali-friendly task manager",
+  "author": "Sapekkho Team",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "dist:publish": "electron-builder --win --x64 -p always"
+  },
+  "build": {
+    "appId": "com.sapekkho.app",
+    "productName": "Sapekkho",
+    "forceCodeSigning": false,
+    "asar": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "xomoash",
+        "repo": "sapekkho"
+      }
+    ],
+    "directories": {
+      "output": "C:/temp/sapekkho-dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "logo.png",
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "logo.svg",
+      "logo.png",
+      "manifest.json"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}
