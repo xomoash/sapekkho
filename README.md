@@ -27,7 +27,7 @@ Sapekkho is a daily task manager for Windows, built to help you plan, organize, 
 Clone the repo and install dependencies:
 
 ```bash
-git clone https://github.com/xomoash/sapekkho.git
+git clone https://github.com/sapekkho/sapekkho.git
 cd sapekkho
 npm install
 ```
