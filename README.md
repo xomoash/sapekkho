@@ -53,3 +53,20 @@ npm run build
 
 ### v1.0.0 — Initial Release
 Full Changelog: Initial release
+
+## v1.1.1 - 2026
+
+### Added
+* Redesigned Settings page with a professional categorized card layout
+* Profile badge in the titlebar for quick Google account management
+* Manual Check for Updates button in the About section
+* Sync Unsynced Tasks feature to safely push offline tasks to Google Calendar
+* Help and Documentation dialog explaining privacy and sync mechanics
+* Disconnect confirmation prompt to prevent accidental sign outs
+* Asynchronous loading animations for sign out and update checking
+
+### Changed
+* Refactored Google Calendar integration to handle disconnects asynchronously
+* Moved context menus to absolute positioning for better UI layering
+* Replaced native app framing with custom titlebar layout
+* Fixed Bugs
