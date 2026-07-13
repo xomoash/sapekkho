@@ -26,6 +26,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGlobalShortcut: (accelerator) => {
     ipcRenderer.send('set-global-shortcut', accelerator);
   },
+  
+  // --- Google Calendar IPC ---
+  startGoogleAuth: () => ipcRenderer.send('start-google-auth'),
+  onGoogleAuthSuccess: (callback) => {
+    ipcRenderer.on('google-auth-success', (event, info) => callback(info));
+  },
+  disconnectGoogle: () => ipcRenderer.invoke('disconnect-google'),
+  getGoogleStatus: () => ipcRenderer.invoke('get-google-status'),
+  syncTaskToGCal: (task) => ipcRenderer.invoke('sync-task-to-gcal', task),
+  deleteGCalEvent: (eventId) => ipcRenderer.send('delete-gcal-event', eventId),
+  
+  // --- Startup Behavior IPC ---
+  setStartupBehavior: (behavior) => ipcRenderer.send('set-startup-behavior', behavior),
+  getStartupBehavior: () => ipcRenderer.invoke('get-startup-behavior'),
+  
+  // --- Auto Updater IPC ---
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('update-available', (event, version) => callback(version));
+  },
+  onUpdateNotAvailable: (callback) => {
+    ipcRenderer.on('update-not-available', () => callback());
+  },
+  
   // Check if running inside Electron
   isElectron: true,
   // Platform info

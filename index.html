@@ -342,6 +342,38 @@
       max-width: 90vw;
       box-shadow: 0 16px 48px rgba(0,0,0,0.25);
     }
+    
+    .settings-card {
+      background: var(--color-background-card);
+      border: 1px solid var(--color-border-card);
+      border-radius: var(--border-radius-lg);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 12px var(--color-border-subtle);
+    }
+    .settings-card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--color-text-primary);
+    }
+    .profile-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      color: var(--color-accent-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      transition: opacity 0.2s;
+    }
+    .profile-badge:hover { opacity: 0.8; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
   </style>
 </head>
 
@@ -386,9 +418,20 @@
     function PriorityDropdown({ value, onChange }) {
       const [open, setOpen] = useState(false);
       const priorities = ["পরে করি", "কালকে করব", "দরকারি", "আম্মু বলসে", "ফরয"];
+      const dropdownRef = useRef(null);
+      
+      useEffect(() => {
+        const handleClickOutside = (event) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            setOpen(false);
+          }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, [dropdownRef]);
       
       return (
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative" }} ref={dropdownRef}>
           <div className="win-input" style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", minWidth: 160 }} onClick={() => setOpen(!open)}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {value} {renderPriorityIcon(value)}
@@ -411,13 +454,16 @@
       );
     }
 
-    
-    // Base64 Audio Beep for Reminder
-    const REMINDER_SOUNDS = {
-      'ping': 'data:audio/wav;base64,UklGRnwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVgAAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAA', // short beep placeholder
-      'chime': 'data:audio/wav;base64,UklGRnoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVwAAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAAA//8AAAAAAAD//wAAAAA=', // slightly different
-      'none': null
-    };
+    let sharedAudioCtx = null;
+    function getAudioContext() {
+      if (!sharedAudioCtx) {
+        sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (sharedAudioCtx.state === 'suspended') {
+        sharedAudioCtx.resume();
+      }
+      return sharedAudioCtx;
+    }
 
     function formatTime(iso) {
       if (!iso) return null;
@@ -467,6 +513,63 @@
       const [isRecordingHotkey, setIsRecordingHotkey] = useState(false);
       const [soundMode, setSoundMode] = useState(() => (window.localStorage.getItem("sapekkho-sound") || "ping") === 'custom' ? 'custom' : 'preset');
       const [calendarAutoFill, setCalendarAutoFill] = useState(() => window.localStorage.getItem("sapekkho-cal-autofill") !== "false");
+      const [startupBehavior, setStartupBehavior] = useState('normal');
+      const [googleConnected, setGoogleConnected] = useState(false);
+      const [googleEmail, setGoogleEmail] = useState('');
+      
+      // New feature states
+      const [isDisconnecting, setIsDisconnecting] = useState(false);
+      const [showProfileMenu, setShowProfileMenu] = useState(false);
+      const [confirmSignOut, setConfirmSignOut] = useState(false);
+      const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+      const [updateStatus, setUpdateStatus] = useState('');
+      const [isSyncing, setIsSyncing] = useState(false);
+      const [syncResult, setSyncResult] = useState('');
+      const [showHelpDialog, setShowHelpDialog] = useState(false);
+      const profileMenuRef = useRef(null);
+
+      useEffect(() => {
+        const handleClickOutside = (event) => {
+          if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+            setShowProfileMenu(false);
+            setConfirmSignOut(false);
+          }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, []);
+      
+      useEffect(() => {
+        if (window.electronAPI) {
+          if (window.electronAPI.getStartupBehavior) {
+            window.electronAPI.getStartupBehavior().then(setStartupBehavior);
+          }
+          if (window.electronAPI.getGoogleStatus) {
+            window.electronAPI.getGoogleStatus().then(status => {
+              setGoogleConnected(status.connected);
+              setGoogleEmail(status.email || '');
+            });
+          }
+          if (window.electronAPI.onGoogleAuthSuccess) {
+            window.electronAPI.onGoogleAuthSuccess(info => {
+              setGoogleConnected(info.connected);
+              setGoogleEmail(info.email || '');
+            });
+          }
+          if (window.electronAPI.onUpdateAvailable) {
+            window.electronAPI.onUpdateAvailable((version) => {
+              setUpdateStatus(`Update available: v${version}`);
+              setIsCheckingUpdates(false);
+            });
+          }
+          if (window.electronAPI.onUpdateNotAvailable) {
+            window.electronAPI.onUpdateNotAvailable(() => {
+              setUpdateStatus('You are on the latest version.');
+              setIsCheckingUpdates(false);
+            });
+          }
+        }
+      }, []);
       
       const isRecordingRef = useRef(isRecordingHotkey);
       isRecordingRef.current = isRecordingHotkey;
@@ -635,7 +738,7 @@
 
         // Simple synth beep instead of base64 to ensure it works across all PCs without external assets
         try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const ctx = getAudioContext();
             const osc = ctx.createOscillator();
             const gainNode = ctx.createGain();
             
@@ -699,11 +802,11 @@
         editorRef.current.focus();
       };
 
-      const addTask = () => {
+      const addTask = async () => {
         if (!form.title.trim()) return;
         const noteHTML = editorRef.current ? editorRef.current.innerHTML : "";
         
-        const task = {
+        let task = {
           id: Date.now().toString(),
           title: form.title.trim(),
           note: noteHTML,
@@ -713,14 +816,37 @@
           notified: false,
           createdAt: new Date().toISOString(),
         };
+
+        if (window.electronAPI && window.electronAPI.syncTaskToGCal && task.reminder) {
+           const eventId = await window.electronAPI.syncTaskToGCal(task);
+           if (eventId) task.gcalEventId = eventId;
+        }
+
         setTasks(prev => [task, ...prev]);
         setForm({ title: "", note: "", reminderDate: "", reminderTime: "", priority: "দরকারি" });
         if (editorRef.current) editorRef.current.innerHTML = "";
         setShowAdd(false);
       };
 
-      const toggle = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-      const remove = (id) => setTasks(prev => prev.filter(t => t.id !== id));
+      const toggle = async (id) => {
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+        
+        const toggledTask = { ...task, done: !task.done };
+        if (window.electronAPI && window.electronAPI.syncTaskToGCal && toggledTask.reminder) {
+           await window.electronAPI.syncTaskToGCal(toggledTask);
+        }
+        
+        setTasks(prev => prev.map(t => t.id === id ? toggledTask : t));
+      };
+
+      const remove = (id) => {
+        const task = tasks.find(t => t.id === id);
+        if (task && task.gcalEventId && window.electronAPI && window.electronAPI.deleteGCalEvent) {
+          window.electronAPI.deleteGCalEvent(task.gcalEventId);
+        }
+        setTasks(prev => prev.filter(t => t.id !== id));
+      };
 
       const openEditModal = (task) => {
         const remDate = task.reminder ? task.reminder.split('T')[0] : "";
@@ -740,20 +866,25 @@
         }, 50);
       };
 
-      const saveEdit = () => {
+      const saveEdit = async () => {
         if (!editingTask) return;
         const noteHTML = editEditorRef.current ? editEditorRef.current.innerHTML : editForm.note;
-        setTasks(prev => prev.map(t => {
-          if (t.id !== editingTask.id) return t;
-          return {
-            ...t,
-            title: editForm.title.trim() || t.title,
+        
+        let updatedTask = {
+            ...editingTask,
+            title: editForm.title.trim() || editingTask.title,
             note: noteHTML,
             reminder: editForm.reminderDate ? `${editForm.reminderDate}${editForm.reminderTime ? `T${editForm.reminderTime}` : "T00:00"}` : null,
             priority: editForm.priority,
             notified: false,
-          };
-        }));
+        };
+
+        if (window.electronAPI && window.electronAPI.syncTaskToGCal && updatedTask.reminder) {
+           const eventId = await window.electronAPI.syncTaskToGCal(updatedTask);
+           if (eventId) updatedTask.gcalEventId = eventId;
+        }
+
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? updatedTask : t));
         setEditingTask(null);
       };
 
@@ -820,6 +951,60 @@
                 <img src="logo.svg" alt="Sapekkho Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
               </div>
               <span style={{ fontSize: 12, fontWeight: 600 }}>Sapekkho</span>
+            </div>
+            <div style={{ flex: 1 }}></div>
+            <div style={{ WebkitAppRegion: "no-drag", marginRight: 140, position: "relative" }} ref={profileMenuRef}>
+              <div className="profile-badge" onClick={() => setShowProfileMenu(!showProfileMenu)}>
+                {googleConnected && googleEmail ? googleEmail[0].toUpperCase() : <i className="ti ti-user-circle" style={{ fontSize: 18 }}></i>}
+              </div>
+              {showProfileMenu && (
+                <div style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "calc(100% + 8px)",
+                  width: 260,
+                  padding: 12,
+                  background: "var(--color-background-card)",
+                  border: "1px solid var(--color-border-card)",
+                  borderRadius: "var(--border-radius-md)",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                  zIndex: 9999,
+                  animation: "ctxFadeIn 0.1s ease"
+                }}>
+                  {googleConnected ? (
+                    <>
+                      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{googleEmail}</div>
+                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>Connected to Google Calendar</div>
+                      <button className="win-btn" style={{ width: "100%", justifyContent: "center", color: confirmSignOut ? "#dc2626" : "inherit" }} onClick={async () => {
+                        if (!confirmSignOut) {
+                          setConfirmSignOut(true);
+                        } else {
+                          setShowProfileMenu(false);
+                          setConfirmSignOut(false);
+                          setIsDisconnecting(true);
+                          if (window.electronAPI) await window.electronAPI.disconnectGoogle();
+                          setGoogleConnected(false);
+                          setGoogleEmail('');
+                          setIsDisconnecting(false);
+                        }
+                      }}>
+                        {isDisconnecting ? 'Disconnecting...' : confirmSignOut ? 'Are you sure?' : 'Sign Out'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Sign In</div>
+                      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 16, lineHeight: 1.4 }}>Signing in syncs your tasks and reminders directly to your Google Calendar.</div>
+                      <button className="win-btn primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => {
+                        if (window.electronAPI) window.electronAPI.startGoogleAuth();
+                        setShowProfileMenu(false);
+                      }}>
+                        <i className="ti ti-brand-google"></i> Sign In with Google
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -904,107 +1089,236 @@
             <div className="scrollable-area">
 
               {filter === 'settings' && (
-                <div style={{ maxWidth: 600 }}>
-                    <div className="settings-row">
-                        <div>
-                            <div style={{ fontWeight: 500, fontSize: 15 }}>Theme</div>
-                            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Choose between light and dark mode.</div>
-                        </div>
-                        <div className={`toggle-switch ${theme === 'dark' ? 'on' : ''}`} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
-                            <div className="toggle-switch-handle"></div>
-                        </div>
-                    </div>
-
-                    <div className="settings-row">
-                        <div>
-                            <div style={{ fontWeight: 500, fontSize: 15 }}>Auto-Launch at Startup</div>
-                            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Start Sapekkho automatically when Windows boots.</div>
-                            {!autoLaunch && (
-                                <div style={{ fontSize: 12, color: "#dc2626", marginTop: 4 }}>
-                                    <i className="ti ti-alert-circle"></i> Warning: Desktop reminders will not trigger if Sapekkho is not running!
-                                </div>
-                            )}
-                        </div>
-                        <div className={`toggle-switch ${autoLaunch ? 'on' : ''}`} onClick={() => setAutoLaunch(!autoLaunch)}>
-                            <div className="toggle-switch-handle"></div>
-                        </div>
-                    </div>
-
-                    <div className="settings-row">
-                        <div>
-                            <div style={{ fontWeight: 500, fontSize: 15 }}>Global Hotkey</div>
-                            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Shortcut to quickly open Sapekkho from anywhere.</div>
-                        </div>
-                        <div>
-                            <button 
-                                className={`win-btn ${isRecordingHotkey ? 'primary' : ''}`} 
-                                onClick={() => setIsRecordingHotkey(true)}
-                                style={{ width: 180, justifyContent: "center" }}
-                            >
-                                {isRecordingHotkey ? "Listening..." : globalShortcut || "Record Shortcut"}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="settings-row">
-                        <div>
-                            <div style={{ fontWeight: 500, fontSize: 15 }}>Auto-fill Date from Calendar</div>
-                            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Automatically use the selected calendar date for new tasks.</div>
-                        </div>
-                        <div className={`toggle-switch ${calendarAutoFill ? 'on' : ''}`} onClick={() => setCalendarAutoFill(!calendarAutoFill)}>
-                            <div className="toggle-switch-handle"></div>
-                        </div>
-                    </div>
-
-                    <div className="settings-row" style={{ alignItems: "flex-start", flexDirection: "column", gap: 16 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                <div style={{ maxWidth: 700 }}>
+                    <div className="settings-card">
+                        <div className="settings-card-title">General</div>
+                        <div className="settings-row" style={{ paddingTop: 0 }}>
                             <div>
-                                <div style={{ fontWeight: 500, fontSize: 15 }}>Reminder Sound</div>
-                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Choose how you'd like to be notified.</div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Theme</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Choose between light and dark mode.</div>
                             </div>
-                            <button className="win-btn" onClick={() => playSound(reminderSound)} title="Play Sound">
-                                <i className={isPlayingSound ? "ti ti-player-pause" : "ti ti-player-play"}></i> {isPlayingSound ? "Pause" : "Play"}
-                            </button>
-                        </div>
-                        
-                        <div style={{ width: "100%", padding: 12, background: "var(--color-background-card-hover)", borderRadius: "var(--border-radius-md)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                                <input type="radio" checked={soundMode === 'preset'} onChange={() => {
-                                    setSoundMode('preset');
-                                    if (reminderSound === 'custom') setReminderSound('ping');
-                                }} />
-                                <span style={{ fontWeight: 500 }}>Preset Sound</span>
+                            <div className={`toggle-switch ${theme === 'dark' ? 'on' : ''}`} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+                                <div className="toggle-switch-handle"></div>
                             </div>
-                            <select className="win-input" value={soundMode === 'preset' ? reminderSound : 'ping'} 
-                                    disabled={soundMode !== 'preset'}
-                                    onChange={e => setReminderSound(e.target.value)} style={{ width: 200, marginLeft: 24 }}>
-                                <option value="ping">Default Ping</option>
-                                <option value="chime">Chime</option>
-                                <option value="none">No Sound</option>
-                            </select>
                         </div>
 
-                        <div style={{ width: "100%", padding: 12, background: "var(--color-background-card-hover)", borderRadius: "var(--border-radius-md)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                                <input type="radio" checked={soundMode === 'custom'} onChange={() => {
-                                    setSoundMode('custom');
-                                    setReminderSound('custom');
-                                }} />
-                                <span style={{ fontWeight: 500 }}>Custom Audio File</span>
+                        <div className="settings-row">
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Auto-Launch at Startup</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Start Sapekkho automatically when Windows boots.</div>
+                                {!autoLaunch && (
+                                    <div style={{ fontSize: 12, color: "#dc2626", marginTop: 4 }}>
+                                        <i className="ti ti-alert-circle"></i> Warning: Desktop reminders will not trigger if Sapekkho is not running!
+                                    </div>
+                                )}
                             </div>
-                            <input type="file" accept="audio/*" className="win-input" 
-                                   disabled={soundMode !== 'custom'}
-                                   style={{ width: "calc(100% - 24px)", padding: 4, marginLeft: 24 }} 
-                                   onChange={e => {
-                                       const file = e.target.files[0];
-                                       if (file) {
-                                           if (file.size > 2 * 1024 * 1024) { alert("File too large. Please select an audio file under 2MB."); return; }
-                                           const reader = new FileReader();
-                                           reader.onload = (ev) => { setCustomSoundData(ev.target.result); setReminderSound('custom'); setSoundMode('custom'); };
-                                           reader.readAsDataURL(file);
-                                       }
-                                   }} />
-                            {customSoundData && soundMode === 'custom' && <div style={{ marginLeft: 24, marginTop: 8, fontSize: 12, color: "var(--color-accent)" }}>Custom audio loaded successfully.</div>}
+                            <div className={`toggle-switch ${autoLaunch ? 'on' : ''}`} onClick={() => setAutoLaunch(!autoLaunch)}>
+                                <div className="toggle-switch-handle"></div>
+                            </div>
+                        </div>
+
+                        <div className="settings-row" style={{ alignItems: "flex-start", flexDirection: "column", gap: 16 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontWeight: 500, fontSize: 15 }}>Startup Behavior</div>
+                                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Choose how Sapekkho opens on startup.</div>
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 16, width: "100%" }}>
+                                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                                    <input type="radio" checked={startupBehavior === 'normal'} onChange={() => { setStartupBehavior('normal'); if (window.electronAPI) window.electronAPI.setStartupBehavior('normal'); }} />
+                                    Normal
+                                </label>
+                                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                                    <input type="radio" checked={startupBehavior === 'minimized'} onChange={() => { setStartupBehavior('minimized'); if (window.electronAPI) window.electronAPI.setStartupBehavior('minimized'); }} />
+                                    Start Minimized
+                                </label>
+                                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                                    <input type="radio" checked={startupBehavior === 'tray'} onChange={() => { setStartupBehavior('tray'); if (window.electronAPI) window.electronAPI.setStartupBehavior('tray'); }} />
+                                    Start to Tray
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0 }}>
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Global Hotkey</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Shortcut to quickly open Sapekkho from anywhere.</div>
+                            </div>
+                            <div>
+                                <button 
+                                    className={`win-btn ${isRecordingHotkey ? 'primary' : ''}`} 
+                                    onClick={() => setIsRecordingHotkey(true)}
+                                    style={{ width: 180, justifyContent: "center" }}
+                                >
+                                    {isRecordingHotkey ? "Listening..." : globalShortcut || "Record Shortcut"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="settings-card">
+                        <div className="settings-card-title">Task Defaults</div>
+                        <div className="settings-row" style={{ paddingTop: 0, borderBottom: "none", paddingBottom: 0 }}>
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Auto-fill Date from Calendar</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Automatically use the selected calendar date for new tasks.</div>
+                            </div>
+                            <div className={`toggle-switch ${calendarAutoFill ? 'on' : ''}`} onClick={() => setCalendarAutoFill(!calendarAutoFill)}>
+                                <div className="toggle-switch-handle"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="settings-card">
+                        <div className="settings-card-title">Notifications & Sounds</div>
+                        <div className="settings-row" style={{ alignItems: "flex-start", flexDirection: "column", gap: 16, paddingTop: 0, borderBottom: "none", paddingBottom: 0 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontWeight: 500, fontSize: 15 }}>Reminder Sound</div>
+                                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Choose how you'd like to be notified.</div>
+                                </div>
+                                <button className="win-btn" onClick={() => playSound(reminderSound)} title="Play Sound">
+                                    <i className={isPlayingSound ? "ti ti-player-pause" : "ti ti-player-play"}></i> {isPlayingSound ? "Pause" : "Play"}
+                                </button>
+                            </div>
+                            
+                            <div style={{ width: "100%", padding: 12, background: "var(--color-background-card-hover)", borderRadius: "var(--border-radius-md)" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                                    <input type="radio" checked={soundMode === 'preset'} onChange={() => {
+                                        setSoundMode('preset');
+                                        if (reminderSound === 'custom') setReminderSound('ping');
+                                    }} />
+                                    <span style={{ fontWeight: 500 }}>Preset Sound</span>
+                                </div>
+                                <select className="win-input" value={soundMode === 'preset' ? reminderSound : 'ping'} 
+                                        disabled={soundMode !== 'preset'}
+                                        onChange={e => setReminderSound(e.target.value)} style={{ width: 200, marginLeft: 24 }}>
+                                    <option value="ping">Default Ping</option>
+                                    <option value="chime">Chime</option>
+                                    <option value="none">No Sound</option>
+                                </select>
+                            </div>
+
+                            <div style={{ width: "100%", padding: 12, background: "var(--color-background-card-hover)", borderRadius: "var(--border-radius-md)" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                                    <input type="radio" checked={soundMode === 'custom'} onChange={() => {
+                                        setSoundMode('custom');
+                                        setReminderSound('custom');
+                                    }} />
+                                    <span style={{ fontWeight: 500 }}>Custom Audio File</span>
+                                </div>
+                                <input type="file" accept="audio/*" className="win-input" 
+                                       disabled={soundMode !== 'custom'}
+                                       style={{ width: "calc(100% - 24px)", padding: 4, marginLeft: 24 }} 
+                                       onChange={e => {
+                                           const file = e.target.files[0];
+                                           if (file) {
+                                               if (file.size > 2 * 1024 * 1024) { alert("File too large. Please select an audio file under 2MB."); return; }
+                                               const reader = new FileReader();
+                                               reader.onload = (ev) => { setCustomSoundData(ev.target.result); setReminderSound('custom'); setSoundMode('custom'); };
+                                               reader.readAsDataURL(file);
+                                           }
+                                       }} />
+                                {customSoundData && soundMode === 'custom' && <div style={{ marginLeft: 24, marginTop: 8, fontSize: 12, color: "var(--color-accent)" }}>Custom audio loaded successfully.</div>}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="settings-card">
+                        <div className="settings-card-title">Integrations</div>
+                        <div className="settings-row" style={{ paddingTop: 0 }}>
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Google Calendar Sync</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5, marginTop: 4, maxWidth: "90%" }}>One-way sync your tasks to a dedicated 'Sapekkho' calendar so you can get native reminders on your phone and other devices.</div>
+                                {googleConnected && googleEmail && (
+                                    <div style={{ fontSize: 13, color: "var(--color-accent)", marginTop: 8, fontWeight: 500 }}>
+                                        <i className="ti ti-check" style={{ marginRight: 4 }}></i> Connected as {googleEmail}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                {!googleConnected ? (
+                                    <button className="win-btn primary" onClick={() => window.electronAPI && window.electronAPI.startGoogleAuth()}>
+                                        <i className="ti ti-brand-google"></i> Connect Google
+                                    </button>
+                                ) : (
+                                    <button className="win-btn" disabled={isDisconnecting} onClick={async () => {
+                                        setIsDisconnecting(true);
+                                        if (window.electronAPI) await window.electronAPI.disconnectGoogle();
+                                        setGoogleConnected(false);
+                                        setGoogleEmail('');
+                                        setIsDisconnecting(false);
+                                    }}>
+                                        {isDisconnecting ? <><i className="ti ti-loader" style={{ animation: "spin 1s linear infinite", marginRight: 6 }}></i> Disconnecting...</> : 'Disconnect'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        {googleConnected && (
+                            <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0 }}>
+                                <div>
+                                    <div style={{ fontWeight: 500, fontSize: 15 }}>Sync Unsynced Tasks</div>
+                                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                                        {(() => {
+                                            const unsyncedCount = tasks.filter(t => t.reminder && !t.gcalEventId && !t.done).length;
+                                            return syncResult ? syncResult : `${unsyncedCount} task${unsyncedCount !== 1 ? 's' : ''} with reminders not yet synced to Google Calendar.`;
+                                        })()}
+                                    </div>
+                                </div>
+                                <div>
+                                    <button className="win-btn" disabled={isSyncing || tasks.filter(t => t.reminder && !t.gcalEventId && !t.done).length === 0} onClick={async () => {
+                                        setIsSyncing(true);
+                                        setSyncResult('');
+                                        const unsynced = tasks.filter(t => t.reminder && !t.gcalEventId && !t.done);
+                                        let synced = 0;
+                                        for (const task of unsynced) {
+                                            setSyncResult(`Syncing ${synced + 1} of ${unsynced.length}...`);
+                                            if (window.electronAPI && window.electronAPI.syncTaskToGCal) {
+                                                const eventId = await window.electronAPI.syncTaskToGCal(task);
+                                                if (eventId) {
+                                                    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, gcalEventId: eventId } : t));
+                                                    synced++;
+                                                }
+                                            }
+                                        }
+                                        setSyncResult(`Done! ${synced} task${synced !== 1 ? 's' : ''} synced successfully.`);
+                                        setIsSyncing(false);
+                                    }}>
+                                        {isSyncing ? <><i className="ti ti-loader" style={{ animation: "spin 1s linear infinite", marginRight: 6 }}></i> Syncing...</> : <><i className="ti ti-refresh" style={{ marginRight: 4 }}></i> Sync Now</>}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="settings-card">
+                        <div className="settings-card-title">About & Updates</div>
+                        <div className="settings-row" style={{ paddingTop: 0 }}>
+                            <div>
+                                <div style={{ fontWeight: 500, fontSize: 15 }}>Sapekkho Version 1.1.0</div>
+                                <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                                    {updateStatus ? updateStatus : "Check to see if there's a newer version available."}
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button className="win-btn" onClick={() => setShowHelpDialog(true)}>
+                                    <i className="ti ti-info-circle"></i> What's New & Help
+                                </button>
+                                <button className="win-btn primary" disabled={isCheckingUpdates} onClick={async () => {
+                                    setIsCheckingUpdates(true);
+                                    setUpdateStatus("Checking...");
+                                    if (window.electronAPI && window.electronAPI.checkForUpdates) {
+                                        const res = await window.electronAPI.checkForUpdates();
+                                        if (res && res.error) {
+                                            setUpdateStatus("Error checking for updates.");
+                                            setIsCheckingUpdates(false);
+                                        }
+                                    }
+                                }}>
+                                    {isCheckingUpdates ? <><i className="ti ti-loader" style={{ animation: "spin 1s linear infinite", marginRight: 6 }}></i> Checking...</> : 'Check for Updates'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1074,6 +1388,11 @@
                             <span style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
                                 <span style={{ color: colorValue }}>{task.priority}</span> {renderPriorityIcon(task.priority, colorValue)}
                             </span>
+                            {task.gcalEventId && (
+                                <span style={{ fontSize: 12, color: "var(--color-accent)", display: "flex", alignItems: "center", gap: 4 }} title="Synced to Google Calendar">
+                                    <i className="ti ti-brand-google"></i> Synced
+                                </span>
+                            )}
                             </div>
                         </div>
                         <button className="win-btn" onClick={() => remove(task.id)} style={{ padding: "4px 8px", background: "transparent", border: "none", color: "var(--color-text-tertiary)" }} title="Delete">
@@ -1177,6 +1496,46 @@
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                   <button className="win-btn" onClick={() => setShowAdd(false)}>Cancel</button>
                   <button className="win-btn primary" onClick={addTask}>Add Task</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Help & What's New Modal */}
+          {showHelpDialog && (
+            <div className="edit-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowHelpDialog(false); }}>
+              <div className="edit-modal" style={{ width: 550, maxHeight: "80vh", overflowY: "auto" }}>
+                <h2 style={{ margin: "0 0 20px", fontSize: 24, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                  <i className="ti ti-info-circle" style={{ color: "var(--color-accent)" }}></i>
+                  What's New in Sapekkho 1.1.0
+                </h2>
+
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>✨ New Features</h3>
+                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                    <li><strong>Redesigned Settings:</strong> A new, categorized card layout for easier navigation.</li>
+                    <li><strong>Profile Menu:</strong> Sign in/out right from the titlebar.</li>
+                    <li><strong>Manual Updates:</strong> Check for and download updates directly from Settings.</li>
+                    <li><strong>Sync Unsynced Tasks:</strong> A new button to safely push local tasks to Google Calendar.</li>
+                  </ul>
+                </div>
+
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>🔑 How Sign-in Works</h3>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                    Signing in connects Sapekkho securely to your Google account using OAuth. Sapekkho only requests permission to manage your Calendar, ensuring your personal data remains private. Your login tokens are stored securely on your local device.
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)" }}>📅 How Sync Works</h3>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                    This is a <strong>one-way sync</strong>. When you create a task with a reminder time in Sapekkho, it automatically pushes it to a dedicated "Sapekkho" calendar on your Google account. This allows you to receive native notifications on your phone or smartwatch exactly when the task is due!
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
+                  <button className="win-btn primary" onClick={() => setShowHelpDialog(false)}>Got it!</button>
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 {
   "name": "sapekkho",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "A simple Bengali-friendly task manager",
   "author": "Sapekkho Team",
   "main": "main.js",
@@ -41,7 +41,11 @@
       "preload.js",
       "logo.svg",
       "logo.png",
-      "manifest.json"
+      "manifest.json",
+      "google-calendar.js",
+      "google-credentials.json",
+      "sw.js",
+      "notification-bell.png"
     ]
   },
   "devDependencies": {
@@ -49,7 +53,9 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.9",
+    "googleapis": "^173.0.0"
   },
   "allowScripts": {
     "electron@31.7.7": true

@@ -1,7 +1,10 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification, shell, globalShortcut, dialog } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
+const Store = require('electron-store');
+const googleCalendar = require('./google-calendar');
 
+const store = new Store();
 let mainWindow = null;
 let tray = null;
 
@@ -46,7 +49,15 @@ function createWindow() {
 
   // Show window once DOM is ready (avoids white flash)
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    const behavior = store.get('startup-behavior', 'normal');
+    if (behavior === 'minimized') {
+      mainWindow.show();
+      mainWindow.minimize();
+    } else if (behavior === 'tray') {
+      // Don't show, wait for user to interact with tray
+    } else {
+      mainWindow.show();
+    }
   });
 
   // Minimise to tray instead of closing
@@ -101,7 +112,7 @@ ipcMain.on('show-notification', (event, { title, body, tag }) => {
     const notification = new Notification({
       title,
       body,
-      icon: path.join(__dirname, 'icon-192.png'),
+      icon: path.join(__dirname, 'notification-bell.png'),
       silent: false,
     });
     notification.on('click', () => {
@@ -200,6 +211,69 @@ ipcMain.on('set-auto-launch', (event, enable) => {
   });
 });
 
+// --- Google Calendar Sync IPC ---
+ipcMain.on('start-google-auth', (event) => {
+  const url = googleCalendar.getAuthUrl();
+  if (url) {
+    googleCalendar.startAuthServer((err, info) => {
+      if (!err && mainWindow) {
+        mainWindow.webContents.send('google-auth-success', info);
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    shell.openExternal(url);
+  }
+});
+
+ipcMain.handle('disconnect-google', async (event) => {
+  return await googleCalendar.disconnectAccount();
+});
+
+ipcMain.handle('get-google-status', (event) => {
+  return {
+    connected: googleCalendar.isAuthenticated(),
+    email: googleCalendar.getUserEmail()
+  };
+});
+
+ipcMain.handle('sync-task-to-gcal', async (event, task) => {
+  return await googleCalendar.syncTaskToCalendar(task);
+});
+
+ipcMain.on('delete-gcal-event', (event, eventId) => {
+  googleCalendar.deleteCalendarEvent(eventId);
+});
+
+// --- Startup Behavior IPC ---
+ipcMain.on('set-startup-behavior', (event, behavior) => {
+  store.set('startup-behavior', behavior);
+});
+
+ipcMain.handle('get-startup-behavior', (event) => {
+  return store.get('startup-behavior', 'normal');
+});
+
+// --- Auto Updater IPC ---
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    // result.updateInfo contains version if available, but if it's the same, it might still return it.
+    // electron-updater will emit 'update-available' or 'update-not-available'
+    // But since we are awaiting, we can just return a generic success and let the events handle the UI, 
+    // or we can parse the result.
+    if (result && result.updateInfo) {
+      // It returns UpdateCheckResult
+      return { checked: true };
+    }
+    return { checked: false };
+  } catch (error) {
+    console.error('Update check error:', error);
+    return { error: error.message };
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
   createTray();
@@ -228,13 +302,22 @@ app.whenReady().then(() => {
     if (mainWindow) mainWindow.webContents.send('update-available', info.version);
   });
 
+  autoUpdater.on('update-not-available', () => {
+    if (mainWindow) mainWindow.webContents.send('update-not-available');
+  });
+
   autoUpdater.on('update-downloaded', (info) => {
     // Ask the user if they want to restart now or later
+    const changelog = info.releaseNotes || 'No changelog available.';
+    const cleanChangelog = typeof changelog === 'string' 
+      ? changelog.replace(/<[^>]*>/g, '') 
+      : changelog;
+
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Ready — Sapekkho',
       message: `Sapekkho v${info.version} has been downloaded.`,
-      detail: 'Restart now to apply the update, or it will be applied automatically next time you open the app.',
+      detail: `What's new:\n${cleanChangelog}\n\nRestart now to apply the update, or it will be applied automatically next time you open the app.`,
       buttons: ['Restart Now', 'Later'],
       defaultId: 0
     }).then(({ response }) => {
