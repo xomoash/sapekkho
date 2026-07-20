@@ -55,6 +55,11 @@
       --color-accent-text: #000000;
     }
 
+    .dark input[type="date"]::-webkit-calendar-picker-indicator,
+    .dark input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+
     * { box-sizing: border-box; }
 
     body {

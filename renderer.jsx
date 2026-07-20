@@ -97,6 +97,14 @@ function isPast(iso) {
   return new Date(iso) < new Date();
 }
 
+function formatShortcutDisplay(shortcut) {
+  if (!shortcut) return "";
+  const isMac = window.navigator.userAgent.indexOf('Mac') >= 0;
+  return shortcut
+    .replace(/CommandOrControl/g, isMac ? "Cmd" : "Ctrl")
+    .replace(/\+/g, " + ");
+}
+
 function Sapekkho() {
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("all");
@@ -113,6 +121,7 @@ function Sapekkho() {
     return val ? val === "true" : true;
   });
   const [globalShortcut, setGlobalShortcut] = useState(() => window.localStorage.getItem("sapekkho-hotkey") || "CommandOrControl+T");
+  const [isHowToUseOpen, setIsHowToUseOpen] = useState(false);
   const [reminderSound, setReminderSound] = useState(() => window.localStorage.getItem("sapekkho-sound") || "ping");
   const [customSoundData, setCustomSoundData] = useState(() => window.localStorage.getItem("sapekkho-custom-sound") || "");
   const [isPlayingSound, setIsPlayingSound] = useState(false);
@@ -134,6 +143,8 @@ function Sapekkho() {
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [isCheckingDeleted, setIsCheckingDeleted] = useState(false);
   const [addReminderError, setAddReminderError] = useState(false);
+  const [titleError, setTitleError] = useState(false);
+  const [addBtnShake, setAddBtnShake] = useState(false);
   const profileMenuRef = useRef(null);
 
   useEffect(() => {
@@ -194,6 +205,7 @@ function Sapekkho() {
   const inputRef = useRef(null);
   const editorRef = useRef(null);
   const editEditorRef = useRef(null);
+  const taskListRef = useRef(null);
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, taskId }
@@ -439,8 +451,16 @@ function Sapekkho() {
     editorRef.current.focus();
   };
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const addTask = () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim()) {
+      setTitleError(true);
+      setAddBtnShake(true);
+      setTimeout(() => setAddBtnShake(false), 600);
+      return;
+    }
+    setTitleError(false);
     const noteHTML = editorRef.current ? editorRef.current.innerHTML : "";
     
     let reminders = [...form.reminders];
@@ -660,6 +680,20 @@ function Sapekkho() {
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
   
+  const handleCalendarDayClick = (d) => {
+    setCalendarDate(d);
+    setFilter('calendar');
+    
+    const hasTask = tasks.some(t => !t.done && new Date(t.reminder || t.createdAt).toDateString() === d.toDateString());
+    if (hasTask) {
+      setTimeout(() => {
+        if (taskListRef.current) {
+          taskListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 50);
+    }
+  };
+
   const renderCalendar = () => {
     const days = getDaysInMonth(calendarDate.getFullYear(), calendarDate.getMonth());
     const grid = [];
@@ -679,7 +713,7 @@ function Sapekkho() {
         <div 
           key={i} 
           className={`cal-day ${isSelected ? 'active-day' : ''} ${isTodayDate ? 'today' : ''}`}
-          onClick={() => { setCalendarDate(d); setFilter('calendar'); }}
+          onClick={() => handleCalendarDayClick(d)}
         >
           {i}
           {hasTask && <div className="task-dot"></div>}
@@ -908,7 +942,7 @@ function Sapekkho() {
                                 onClick={() => setIsRecordingHotkey(true)}
                                 style={{ width: 180, justifyContent: "center" }}
                             >
-                                {isRecordingHotkey ? "Listening..." : globalShortcut || "Record Shortcut"}
+                                {isRecordingHotkey ? "Listening..." : formatShortcutDisplay(globalShortcut) || "Record Shortcut"}
                             </button>
                         </div>
                     </div>
@@ -1102,63 +1136,79 @@ function Sapekkho() {
                 </div>
 
                 <div className="settings-card">
-                    <div className="settings-card-title">How to Use</div>
-
-                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.8 }}>
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Adding a Task</div>
-                        <ol style={{ margin: 0, paddingLeft: 20 }}>
-                          <li>Click the <strong>+ New Task</strong> button in the sidebar, or press <kbd style={{ background: 'var(--color-background-sidebar)', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>Ctrl+T</kbd> anywhere.</li>
-                          <li>Type a task name. Press <kbd style={{ background: 'var(--color-background-sidebar)', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>Enter</kbd> or click <strong>Add Task</strong> to save.</li>
-                          <li>Optionally add a note using the rich text editor (supports <strong>Bold</strong>, <em>Italic</em>, and bullet lists).</li>
-                          <li>Set a <strong>Priority</strong> from the dropdown — from "পরে করি" (low) to "ফরয" (critical).</li>
-                        </ol>
-                      </div>
-
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Setting Reminders</div>
-                        <ol style={{ margin: 0, paddingLeft: 20 }}>
-                          <li>In the New Task or Edit Task modal, go to the <strong>Add Reminder Time</strong> section.</li>
-                          <li>Pick a <strong>date</strong> first (required), then optionally a <strong>time</strong>.</li>
-                          <li>Click <strong>+ Add</strong> to add it. You can add multiple reminders per task!</li>
-                          <li>At the reminder time, Sapekkho will show a system notification and play a sound.</li>
-                          <li>To remove a reminder, click the <strong>✕</strong> next to it.</li>
-                        </ol>
-                      </div>
-
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Editing & Managing Tasks</div>
-                        <ol style={{ margin: 0, paddingLeft: 20 }}>
-                          <li><strong>Right-click</strong> any task card to open the context menu (Edit, Delete, Mark Done).</li>
-                          <li>Click the <strong>checkbox</strong> on a task card to mark it complete/incomplete.</li>
-                          <li>Use the sidebar to filter tasks: <strong>All Tasks</strong>, <strong>Today</strong>, <strong>Calendar</strong>, <strong>Completed</strong>, or by priority.</li>
-                        </ol>
-                      </div>
-
-                      <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Google Calendar Sync</div>
-                        <ol style={{ margin: 0, paddingLeft: 20 }}>
-                          <li>Go to <strong>Settings → Integrations</strong> and click <strong>Sign in with Google</strong>.</li>
-                          <li>Once connected, every task with a reminder will automatically sync to a "Sapekkho" calendar in Google Calendar.</li>
-                          <li>Tasks sync in the background — look for the spinning indicator on a task card during sync.</li>
-                          <li>If you delete an event from Google Calendar, click the <strong>Refresh</strong> button (↻) in the main header to detect and handle deletions.</li>
-                        </ol>
-                      </div>
-
-                      <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Keyboard Shortcuts</div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                          <tbody>
-                            {[['Ctrl+T', 'Open New Task anywhere'], ['Enter', 'Submit task form'], ['Right-click task', 'Edit / Delete / Complete']].map(([key, desc]) => (
-                              <tr key={key} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                                <td style={{ padding: '6px 0', width: 160 }}><kbd style={{ background: 'var(--color-background-sidebar)', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>{key}</kbd></td>
-                                <td style={{ padding: '6px 0', color: 'var(--color-text-secondary)' }}>{desc}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                    <div 
+                        className="settings-card-title" 
+                        onClick={() => setIsHowToUseOpen(!isHowToUseOpen)}
+                        style={{ 
+                            cursor: "pointer", 
+                            display: "flex", 
+                            justifyContent: "space-between", 
+                            alignItems: "center", 
+                            userSelect: "none",
+                            marginBottom: isHowToUseOpen ? 16 : 0 
+                        }}
+                    >
+                        <span>How to Use</span>
+                        <i className={`ti ti-chevron-${isHowToUseOpen ? 'up' : 'down'}`} style={{ fontSize: 18, color: "var(--color-text-secondary)" }}></i>
                     </div>
+
+                    {isHowToUseOpen && (
+                        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.8 }}>
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Adding a Task</div>
+                            <ol style={{ margin: 0, paddingLeft: 20 }}>
+                              <li>Click the <strong>+ New Task</strong> button in the sidebar, or press <kbd style={{ background: 'var(--color-background-sidebar)', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>{formatShortcutDisplay(globalShortcut)}</kbd> anywhere.</li>
+                              <li>Type a task name. Press <kbd style={{ background: 'var(--color-background-sidebar)', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>Enter</kbd> or click <strong>Add Task</strong> to save.</li>
+                              <li>Optionally add a note using the rich text editor (supports <strong>Bold</strong>, <em>Italic</em>, and bullet lists).</li>
+                              <li>Set a <strong>Priority</strong> from the dropdown from "পরে করি" (low) to "ফরয" (critical).</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Setting Reminders</div>
+                            <ol style={{ margin: 0, paddingLeft: 20 }}>
+                              <li>In the New Task or Edit Task modal, go to the <strong>Add Reminder Time</strong> section.</li>
+                              <li>Pick a <strong>date</strong> first (required), then optionally a <strong>time</strong>.</li>
+                              <li>Click <strong>+ Add</strong> to add it. You can add multiple reminders per task!</li>
+                              <li>At the reminder time, Sapekkho will show a system notification and play a sound.</li>
+                              <li>To remove a reminder, click the <strong>✕</strong> next to it.</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Editing & Managing Tasks</div>
+                            <ol style={{ margin: 0, paddingLeft: 20 }}>
+                              <li><strong>Right click</strong> any task card to open the context menu (Edit, Delete, Mark Done).</li>
+                              <li>Click the <strong>checkbox</strong> on a task card to mark it complete/incomplete.</li>
+                              <li>Use the sidebar to filter tasks: <strong>All Tasks</strong>, <strong>Today</strong>, <strong>Calendar</strong>, <strong>Completed</strong>, or by priority.</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Google Calendar Sync</div>
+                            <ol style={{ margin: 0, paddingLeft: 20 }}>
+                              <li>Go to <strong>Settings → Integrations</strong> and click <strong>Sign in with Google</strong>.</li>
+                              <li>Once connected, every task with a reminder will automatically sync to a "Sapekkho" calendar in Google Calendar.</li>
+                              <li>Tasks sync in the background. Look for the spinning indicator on a task card during sync.</li>
+                              <li>If you delete an event from Google Calendar, click the <strong>Refresh</strong> button (↻) in the main header to detect and handle deletions.</li>
+                            </ol>
+                          </div>
+
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text-primary)", marginBottom: 6 }}>Keyboard Shortcuts</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                              <tbody>
+                                {[[globalShortcut, 'Open New Task anywhere'], ['Enter', 'Submit task form'], ['Right click task', 'Edit / Delete / Complete']].map(([key, desc]) => (
+                                  <tr key={key} style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                                    <td style={{ padding: '6px 0', width: 160 }}><kbd style={{ background: 'var(--color-background-sidebar)', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>{key === globalShortcut ? formatShortcutDisplay(globalShortcut) : key}</kbd></td>
+                                    <td style={{ padding: '6px 0', color: 'var(--color-text-secondary)' }}>{desc}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                    )}
                 </div>
             </div>
           )}
@@ -1175,7 +1225,8 @@ function Sapekkho() {
 
           {/* Task List */}
           {filter !== 'settings' && (
-            !loaded ? (
+            <div ref={taskListRef}>
+              {!loaded ? (
                 <p>Loading tasks...</p>
             ) : filtered.length === 0 ? (
                 <div style={{ textAlign: "center", marginTop: 60, color: "var(--color-text-tertiary)" }}>
@@ -1210,7 +1261,7 @@ function Sapekkho() {
                 const allReminders = task.reminders && task.reminders.length > 0 ? task.reminders : (task.reminder ? [task.reminder] : []);
                 
                 return (
-                    <div key={task.id} className="task-card" style={{ borderLeft: `4px solid ${borderColor}` }} onContextMenu={(e) => handleTaskContextMenu(e, task)}>
+                    <div key={task.id} className="task-card" style={{ borderLeft: `4px solid ${borderColor}` }} onContextMenu={(e) => handleTaskContextMenu(e, task)} onDoubleClick={() => openEditModal(task)}>
                     <div className={`win-checkbox ${task.done ? 'checked' : ''}`} onClick={() => toggle(task.id)}>
                         {task.done && <i className="ti ti-check" style={{ fontSize: 14 }}></i>}
                     </div>
@@ -1282,7 +1333,8 @@ function Sapekkho() {
                     </div>
                 );
                 })
-            )
+            )}
+            </div>
           )}
         </div>
       </div>
@@ -1311,7 +1363,20 @@ function Sapekkho() {
       {/* Edit Modal */}
       {editingTask && (
         <div className="edit-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
-          <div className="edit-modal">
+          <div
+            className="edit-modal"
+            tabIndex={-1}
+            style={{ outline: 'none' }}
+            onKeyDown={e => {
+              if (e.key !== 'Enter') return;
+              const isEditor = document.activeElement && document.activeElement.contentEditable === 'true';
+              const isDateOrTime = document.activeElement && document.activeElement.tagName === 'INPUT' &&
+                (document.activeElement.type === 'date' || document.activeElement.type === 'time');
+              if (isEditor || isDateOrTime) return;
+              e.preventDefault();
+              saveEdit();
+            }}
+          >
             <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 600 }}>Edit Task</h2>
             <input
               className="win-input"
@@ -1337,26 +1402,47 @@ function Sapekkho() {
 
             <div style={{ display: "flex", gap: 8, flexDirection: "column", marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Add Reminder Time:</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="date" className="win-input" value={editForm.tempDate} onChange={e => setEditForm(f => ({ ...f, tempDate: e.target.value }))} />
-                <input type="time" className="win-input" value={editForm.tempTime} onChange={e => setEditForm(f => ({ ...f, tempTime: e.target.value }))} />
-                <button 
-                  className="win-btn primary" 
-                  style={{ whiteSpace: "nowrap" }}
-                  onClick={() => {
-                    if (!editForm.tempDate) return;
-                    const rStr = `${editForm.tempDate}${editForm.tempTime ? `T${editForm.tempTime}` : "T00:00"}`;
-                    if (!editForm.reminders.includes(rStr)) {
-                      setEditForm(f => ({
-                        ...f,
-                        reminders: [...f.reminders, rStr].sort(),
-                        tempTime: "" // Clear time for next entry
-                      }));
-                    }
-                  }}
-                >
-                  + Add
-                </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <input type="date" className="win-input" style={{ width: '100%' }} min={todayStr} value={editForm.tempDate} onChange={e => setEditForm(f => ({ ...f, tempDate: e.target.value }))} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+                  <input
+                    type="time"
+                    className="win-input"
+                    style={{ width: '100%' }}
+                    value={editForm.tempTime}
+                    onChange={e => setEditForm(f => ({ ...f, tempTime: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (!editForm.tempDate) return;
+                        const rStr = `${editForm.tempDate}${editForm.tempTime ? `T${editForm.tempTime}` : "T00:00"}`;
+                        if (!editForm.reminders.includes(rStr)) {
+                          setEditForm(f => ({ ...f, reminders: [...f.reminders, rStr].sort(), tempDate: "", tempTime: "" }));
+                        }
+                      }
+                    }}
+                  />
+                  <span
+                    onClick={() => {
+                      if (!editForm.tempDate) return;
+                      const rStr = `${editForm.tempDate}${editForm.tempTime ? `T${editForm.tempTime}` : "T00:00"}`;
+                      if (!editForm.reminders.includes(rStr)) {
+                        setEditForm(f => ({ ...f, reminders: [...f.reminders, rStr].sort(), tempDate: "", tempTime: "" }));
+                      }
+                    }}
+                    style={{
+                      fontSize: 11,
+                      color: '#3b82f6',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      marginTop: 4,
+                      whiteSpace: 'nowrap',
+                      alignSelf: 'flex-start'
+                    }}
+                  >+ Add multiple reminder times</span>
+                </div>
               </div>
             </div>
 
@@ -1394,16 +1480,29 @@ function Sapekkho() {
       {/* Add Modal */}
       {showAdd && (
         <div className="edit-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAdd(false); }}>
-          <div className="edit-modal">
+          <div
+            className="edit-modal"
+            tabIndex={-1}
+            style={{ outline: 'none' }}
+            onKeyDown={e => {
+              if (e.key !== 'Enter') return;
+              const isEditor = document.activeElement && document.activeElement.contentEditable === 'true';
+              const isDateOrTime = document.activeElement && document.activeElement.tagName === 'INPUT' &&
+                (document.activeElement.type === 'date' || document.activeElement.type === 'time');
+              if (isEditor || isDateOrTime) return;
+              e.preventDefault();
+              addTask();
+            }}
+          >
             <h2 style={{ margin: "0 0 16px", fontSize: 20, fontWeight: 600 }}>New Task</h2>
             <input
               ref={inputRef}
               className="win-input"
               placeholder="Task name"
               value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              onChange={e => { setForm(f => ({ ...f, title: e.target.value })); if (e.target.value.trim()) setTitleError(false); }}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } }}
-              style={{ marginBottom: 12, fontSize: 16, fontWeight: 500 }}
+              style={{ marginBottom: titleError ? 0 : 12, fontSize: 16, fontWeight: 500, borderBottomColor: titleError ? '#dc2626' : undefined }}
               autoFocus
             />
             
@@ -1420,45 +1519,69 @@ function Sapekkho() {
               style={{ marginBottom: 12, borderTopLeftRadius: 0, borderTopRightRadius: 0 }}
             ></div>
 
+            {titleError && (
+              <div style={{ color: '#dc2626', fontSize: 12, fontWeight: 500, marginBottom: 12, marginTop: 4 }}>
+                Please enter a task name.
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 8, flexDirection: "column", marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Add Reminder Time:</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="date" className="win-input" value={form.tempDate}
-                  style={addReminderError ? { borderBottomColor: '#dc2626' } : {}}
-                  onChange={e => { 
-                    setForm(f => ({ ...f, tempDate: e.target.value })); 
-                    if (e.target.value) setAddReminderError(false);
-                  }} />
-                <input type="time" className="win-input" value={form.tempTime} 
-                  onChange={e => {
-                    setForm(f => ({ ...f, tempTime: e.target.value }));
-                    if (form.tempDate) setAddReminderError(false);
-                  }} />
-                <button 
-                  className="win-btn primary" 
-                  style={{ whiteSpace: "nowrap" }}
-                  onClick={() => {
-                    if (!form.tempDate) { 
-                      setAddReminderError(true); 
-                      return; 
-                    }
-                    const rStr = `${form.tempDate}${form.tempTime ? `T${form.tempTime}` : "T00:00"}`;
-                    if (!form.reminders.includes(rStr)) {
-                      setForm(f => ({
-                        ...f,
-                        reminders: [...f.reminders, rStr].sort(),
-                        tempTime: ""
-                      }));
-                    }
-                    setAddReminderError(false);
-                  }}
-                >
-                  + Add
-                </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <input type="date" className="win-input" style={{ width: '100%' }} min={todayStr} value={form.tempDate}
+                    style={addReminderError ? { borderBottomColor: '#dc2626', width: '100%' } : { width: '100%' }}
+                    onChange={e => { 
+                      setForm(f => ({ ...f, tempDate: e.target.value })); 
+                      if (e.target.value) setAddReminderError(false);
+                    }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+                  <input
+                    type="time"
+                    className="win-input"
+                    style={{ width: '100%' }}
+                    value={form.tempTime}
+                    onChange={e => {
+                      setForm(f => ({ ...f, tempTime: e.target.value }));
+                      if (form.tempDate) setAddReminderError(false);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (!form.tempDate) { setAddReminderError(true); return; }
+                        const rStr = `${form.tempDate}${form.tempTime ? `T${form.tempTime}` : "T00:00"}`;
+                        if (!form.reminders.includes(rStr)) {
+                          setForm(f => ({ ...f, reminders: [...f.reminders, rStr].sort(), tempDate: "", tempTime: "" }));
+                        }
+                        setAddReminderError(false);
+                      }
+                    }}
+                  />
+                  <span
+                    onClick={() => {
+                      if (!form.tempDate) { setAddReminderError(true); return; }
+                      const rStr = `${form.tempDate}${form.tempTime ? `T${form.tempTime}` : "T00:00"}`;
+                      if (!form.reminders.includes(rStr)) {
+                        setForm(f => ({ ...f, reminders: [...f.reminders, rStr].sort(), tempDate: "", tempTime: "" }));
+                      }
+                      setAddReminderError(false);
+                    }}
+                    style={{
+                      fontSize: 11,
+                      color: '#3b82f6',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      marginTop: 4,
+                      whiteSpace: 'nowrap',
+                      alignSelf: 'flex-start'
+                    }}
+                  >+ Add multiple reminder times</span>
+                </div>
               </div>
               {addReminderError && (
                 <div style={{ color: '#dc2626', fontSize: 12, fontWeight: 500, marginTop: 4 }}>
-                  Please select a date first before adding a reminder.
+                  Please select a date first.
                 </div>
               )}
             </div>
@@ -1487,8 +1610,8 @@ function Sapekkho() {
             </div>
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="win-btn" onClick={() => setShowAdd(false)}>Cancel</button>
-              <button className="win-btn primary" onClick={addTask}>Add Task</button>
+              <button className="win-btn" onClick={() => { setShowAdd(false); setTitleError(false); }}>Cancel</button>
+              <button className="win-btn primary" onClick={addTask} style={addBtnShake ? { animation: 'shake 0.5s ease' } : {}}>Add Task</button>
             </div>
           </div>
         </div>

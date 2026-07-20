@@ -182,6 +182,11 @@ function isPast(iso) {
   if (!iso) return false;
   return new Date(iso) < new Date();
 }
+function formatShortcutDisplay(shortcut) {
+  if (!shortcut) return "";
+  const isMac = window.navigator.userAgent.indexOf('Mac') >= 0;
+  return shortcut.replace(/CommandOrControl/g, isMac ? "Cmd" : "Ctrl").replace(/\+/g, " + ");
+}
 function Sapekkho() {
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("all");
@@ -204,6 +209,7 @@ function Sapekkho() {
     return val ? val === "true" : true;
   });
   const [globalShortcut, setGlobalShortcut] = useState(() => window.localStorage.getItem("sapekkho-hotkey") || "CommandOrControl+T");
+  const [isHowToUseOpen, setIsHowToUseOpen] = useState(false);
   const [reminderSound, setReminderSound] = useState(() => window.localStorage.getItem("sapekkho-sound") || "ping");
   const [customSoundData, setCustomSoundData] = useState(() => window.localStorage.getItem("sapekkho-custom-sound") || "");
   const [isPlayingSound, setIsPlayingSound] = useState(false);
@@ -225,6 +231,8 @@ function Sapekkho() {
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [isCheckingDeleted, setIsCheckingDeleted] = useState(false);
   const [addReminderError, setAddReminderError] = useState(false);
+  const [titleError, setTitleError] = useState(false);
+  const [addBtnShake, setAddBtnShake] = useState(false);
   const profileMenuRef = useRef(null);
   useEffect(() => {
     const handleClickOutside = event => {
@@ -278,6 +286,7 @@ function Sapekkho() {
   const inputRef = useRef(null);
   const editorRef = useRef(null);
   const editEditorRef = useRef(null);
+  const taskListRef = useRef(null);
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState(null); // { x, y, taskId }
@@ -519,8 +528,15 @@ function Sapekkho() {
     document.execCommand(command, false, null);
     editorRef.current.focus();
   };
+  const todayStr = new Date().toISOString().split('T')[0];
   const addTask = () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim()) {
+      setTitleError(true);
+      setAddBtnShake(true);
+      setTimeout(() => setAddBtnShake(false), 600);
+      return;
+    }
+    setTitleError(false);
     const noteHTML = editorRef.current ? editorRef.current.innerHTML : "";
     let reminders = [...form.reminders];
     if (form.tempDate) {
@@ -751,6 +767,21 @@ function Sapekkho() {
   });
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const firstDayOfMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
+  const handleCalendarDayClick = d => {
+    setCalendarDate(d);
+    setFilter('calendar');
+    const hasTask = tasks.some(t => !t.done && new Date(t.reminder || t.createdAt).toDateString() === d.toDateString());
+    if (hasTask) {
+      setTimeout(() => {
+        if (taskListRef.current) {
+          taskListRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      }, 50);
+    }
+  };
   const renderCalendar = () => {
     const days = getDaysInMonth(calendarDate.getFullYear(), calendarDate.getMonth());
     const grid = [];
@@ -768,10 +799,7 @@ function Sapekkho() {
       grid.push(/*#__PURE__*/React.createElement("div", {
         key: i,
         className: `cal-day ${isSelected ? 'active-day' : ''} ${isTodayDate ? 'today' : ''}`,
-        onClick: () => {
-          setCalendarDate(d);
-          setFilter('calendar');
-        }
+        onClick: () => handleCalendarDayClick(d)
       }, i, hasTask && /*#__PURE__*/React.createElement("div", {
         className: "task-dot"
       })));
@@ -1241,7 +1269,7 @@ function Sapekkho() {
       width: 180,
       justifyContent: "center"
     }
-  }, isRecordingHotkey ? "Listening..." : globalShortcut || "Record Shortcut")))), /*#__PURE__*/React.createElement("div", {
+  }, isRecordingHotkey ? "Listening..." : formatShortcutDisplay(globalShortcut) || "Record Shortcut")))), /*#__PURE__*/React.createElement("div", {
     className: "settings-card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "settings-card-title"
@@ -1612,8 +1640,23 @@ function Sapekkho() {
   }), " sapekkho.github.io"))), /*#__PURE__*/React.createElement("div", {
     className: "settings-card"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "settings-card-title"
-  }, "How to Use"), /*#__PURE__*/React.createElement("div", {
+    className: "settings-card-title",
+    onClick: () => setIsHowToUseOpen(!isHowToUseOpen),
+    style: {
+      cursor: "pointer",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      userSelect: "none",
+      marginBottom: isHowToUseOpen ? 16 : 0
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "How to Use"), /*#__PURE__*/React.createElement("i", {
+    className: `ti ti-chevron-${isHowToUseOpen ? 'up' : 'down'}`,
+    style: {
+      fontSize: 18,
+      color: "var(--color-text-secondary)"
+    }
+  })), isHowToUseOpen && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       color: "var(--color-text-secondary)",
@@ -1642,14 +1685,14 @@ function Sapekkho() {
       borderRadius: 4,
       fontFamily: 'monospace'
     }
-  }, "Ctrl+T"), " anywhere."), /*#__PURE__*/React.createElement("li", null, "Type a task name. Press ", /*#__PURE__*/React.createElement("kbd", {
+  }, formatShortcutDisplay(globalShortcut)), " anywhere."), /*#__PURE__*/React.createElement("li", null, "Type a task name. Press ", /*#__PURE__*/React.createElement("kbd", {
     style: {
       background: 'var(--color-background-sidebar)',
       padding: '1px 6px',
       borderRadius: 4,
       fontFamily: 'monospace'
     }
-  }, "Enter"), " or click ", /*#__PURE__*/React.createElement("strong", null, "Add Task"), " to save."), /*#__PURE__*/React.createElement("li", null, "Optionally add a note using the rich text editor (supports ", /*#__PURE__*/React.createElement("strong", null, "Bold"), ", ", /*#__PURE__*/React.createElement("em", null, "Italic"), ", and bullet lists)."), /*#__PURE__*/React.createElement("li", null, "Set a ", /*#__PURE__*/React.createElement("strong", null, "Priority"), " from the dropdown — from \"পরে করি\" (low) to \"ফরয\" (critical)."))), /*#__PURE__*/React.createElement("div", {
+  }, "Enter"), " or click ", /*#__PURE__*/React.createElement("strong", null, "Add Task"), " to save."), /*#__PURE__*/React.createElement("li", null, "Optionally add a note using the rich text editor (supports ", /*#__PURE__*/React.createElement("strong", null, "Bold"), ", ", /*#__PURE__*/React.createElement("em", null, "Italic"), ", and bullet lists)."), /*#__PURE__*/React.createElement("li", null, "Set a ", /*#__PURE__*/React.createElement("strong", null, "Priority"), " from the dropdown from \"পরে করি\" (low) to \"ফরয\" (critical)."))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -1681,7 +1724,7 @@ function Sapekkho() {
       margin: 0,
       paddingLeft: 20
     }
-  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("strong", null, "Right-click"), " any task card to open the context menu (Edit, Delete, Mark Done)."), /*#__PURE__*/React.createElement("li", null, "Click the ", /*#__PURE__*/React.createElement("strong", null, "checkbox"), " on a task card to mark it complete/incomplete."), /*#__PURE__*/React.createElement("li", null, "Use the sidebar to filter tasks: ", /*#__PURE__*/React.createElement("strong", null, "All Tasks"), ", ", /*#__PURE__*/React.createElement("strong", null, "Today"), ", ", /*#__PURE__*/React.createElement("strong", null, "Calendar"), ", ", /*#__PURE__*/React.createElement("strong", null, "Completed"), ", or by priority."))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("strong", null, "Right click"), " any task card to open the context menu (Edit, Delete, Mark Done)."), /*#__PURE__*/React.createElement("li", null, "Click the ", /*#__PURE__*/React.createElement("strong", null, "checkbox"), " on a task card to mark it complete/incomplete."), /*#__PURE__*/React.createElement("li", null, "Use the sidebar to filter tasks: ", /*#__PURE__*/React.createElement("strong", null, "All Tasks"), ", ", /*#__PURE__*/React.createElement("strong", null, "Today"), ", ", /*#__PURE__*/React.createElement("strong", null, "Calendar"), ", ", /*#__PURE__*/React.createElement("strong", null, "Completed"), ", or by priority."))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -1697,7 +1740,7 @@ function Sapekkho() {
       margin: 0,
       paddingLeft: 20
     }
-  }, /*#__PURE__*/React.createElement("li", null, "Go to ", /*#__PURE__*/React.createElement("strong", null, "Settings → Integrations"), " and click ", /*#__PURE__*/React.createElement("strong", null, "Sign in with Google"), "."), /*#__PURE__*/React.createElement("li", null, "Once connected, every task with a reminder will automatically sync to a \"Sapekkho\" calendar in Google Calendar."), /*#__PURE__*/React.createElement("li", null, "Tasks sync in the background — look for the spinning indicator on a task card during sync."), /*#__PURE__*/React.createElement("li", null, "If you delete an event from Google Calendar, click the ", /*#__PURE__*/React.createElement("strong", null, "Refresh"), " button (↻) in the main header to detect and handle deletions."))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("li", null, "Go to ", /*#__PURE__*/React.createElement("strong", null, "Settings → Integrations"), " and click ", /*#__PURE__*/React.createElement("strong", null, "Sign in with Google"), "."), /*#__PURE__*/React.createElement("li", null, "Once connected, every task with a reminder will automatically sync to a \"Sapekkho\" calendar in Google Calendar."), /*#__PURE__*/React.createElement("li", null, "Tasks sync in the background. Look for the spinning indicator on a task card during sync."), /*#__PURE__*/React.createElement("li", null, "If you delete an event from Google Calendar, click the ", /*#__PURE__*/React.createElement("strong", null, "Refresh"), " button (↻) in the main header to detect and handle deletions."))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
@@ -1714,7 +1757,7 @@ function Sapekkho() {
       borderCollapse: 'collapse',
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("tbody", null, [['Ctrl+T', 'Open New Task anywhere'], ['Enter', 'Submit task form'], ['Right-click task', 'Edit / Delete / Complete']].map(([key, desc]) => /*#__PURE__*/React.createElement("tr", {
+  }, /*#__PURE__*/React.createElement("tbody", null, [[globalShortcut, 'Open New Task anywhere'], ['Enter', 'Submit task form'], ['Right click task', 'Edit / Delete / Complete']].map(([key, desc]) => /*#__PURE__*/React.createElement("tr", {
     key: key,
     style: {
       borderBottom: '1px solid var(--color-border-subtle)'
@@ -1732,7 +1775,7 @@ function Sapekkho() {
       fontFamily: 'monospace',
       fontSize: 12
     }
-  }, key)), /*#__PURE__*/React.createElement("td", {
+  }, key === globalShortcut ? formatShortcutDisplay(globalShortcut) : key)), /*#__PURE__*/React.createElement("td", {
     style: {
       padding: '6px 0',
       color: 'var(--color-text-secondary)'
@@ -1757,7 +1800,9 @@ function Sapekkho() {
     className: "cal-header"
   }, "Fri"), /*#__PURE__*/React.createElement("div", {
     className: "cal-header"
-  }, "Sat"), renderCalendar())), filter !== 'settings' && (!loaded ? /*#__PURE__*/React.createElement("p", null, "Loading tasks...") : filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "Sat"), renderCalendar())), filter !== 'settings' && /*#__PURE__*/React.createElement("div", {
+    ref: taskListRef
+  }, !loaded ? /*#__PURE__*/React.createElement("p", null, "Loading tasks...") : filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       marginTop: 60,
@@ -1798,7 +1843,8 @@ function Sapekkho() {
       style: {
         borderLeft: `4px solid ${borderColor}`
       },
-      onContextMenu: e => handleTaskContextMenu(e, task)
+      onContextMenu: e => handleTaskContextMenu(e, task),
+      onDoubleClick: () => openEditModal(task)
     }, /*#__PURE__*/React.createElement("div", {
       className: `win-checkbox ${task.done ? 'checked' : ''}`,
       onClick: () => toggle(task.id)
@@ -2018,7 +2064,19 @@ function Sapekkho() {
       if (e.target === e.currentTarget) setEditingTask(null);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "edit-modal"
+    className: "edit-modal",
+    tabIndex: -1,
+    style: {
+      outline: 'none'
+    },
+    onKeyDown: e => {
+      if (e.key !== 'Enter') return;
+      const isEditor = document.activeElement && document.activeElement.contentEditable === 'true';
+      const isDateOrTime = document.activeElement && document.activeElement.tagName === 'INPUT' && (document.activeElement.type === 'date' || document.activeElement.type === 'time');
+      if (isEditor || isDateOrTime) return;
+      e.preventDefault();
+      saveEdit();
+    }
   }, /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: "0 0 16px",
@@ -2108,29 +2166,58 @@ function Sapekkho() {
   }, "Add Reminder Time:"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 8
+      gap: 8,
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
     }
   }, /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "win-input",
+    style: {
+      width: '100%'
+    },
+    min: todayStr,
     value: editForm.tempDate,
     onChange: e => setEditForm(f => ({
       ...f,
       tempDate: e.target.value
     }))
-  }), /*#__PURE__*/React.createElement("input", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "win-input",
+    style: {
+      width: '100%'
+    },
     value: editForm.tempTime,
     onChange: e => setEditForm(f => ({
       ...f,
       tempTime: e.target.value
-    }))
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "win-btn primary",
-    style: {
-      whiteSpace: "nowrap"
-    },
+    })),
+    onKeyDown: e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!editForm.tempDate) return;
+        const rStr = `${editForm.tempDate}${editForm.tempTime ? `T${editForm.tempTime}` : "T00:00"}`;
+        if (!editForm.reminders.includes(rStr)) {
+          setEditForm(f => ({
+            ...f,
+            reminders: [...f.reminders, rStr].sort(),
+            tempDate: "",
+            tempTime: ""
+          }));
+        }
+      }
+    }
+  }), /*#__PURE__*/React.createElement("span", {
     onClick: () => {
       if (!editForm.tempDate) return;
       const rStr = `${editForm.tempDate}${editForm.tempTime ? `T${editForm.tempTime}` : "T00:00"}`;
@@ -2138,11 +2225,21 @@ function Sapekkho() {
         setEditForm(f => ({
           ...f,
           reminders: [...f.reminders, rStr].sort(),
-          tempTime: "" // Clear time for next entry
+          tempDate: "",
+          tempTime: ""
         }));
       }
+    },
+    style: {
+      fontSize: 11,
+      color: '#3b82f6',
+      cursor: 'pointer',
+      userSelect: 'none',
+      marginTop: 4,
+      whiteSpace: 'nowrap',
+      alignSelf: 'flex-start'
     }
-  }, "+ Add"))), editForm.reminders.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "+ Add multiple reminder times")))), editForm.reminders.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -2219,7 +2316,19 @@ function Sapekkho() {
       if (e.target === e.currentTarget) setShowAdd(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "edit-modal"
+    className: "edit-modal",
+    tabIndex: -1,
+    style: {
+      outline: 'none'
+    },
+    onKeyDown: e => {
+      if (e.key !== 'Enter') return;
+      const isEditor = document.activeElement && document.activeElement.contentEditable === 'true';
+      const isDateOrTime = document.activeElement && document.activeElement.tagName === 'INPUT' && (document.activeElement.type === 'date' || document.activeElement.type === 'time');
+      if (isEditor || isDateOrTime) return;
+      e.preventDefault();
+      addTask();
+    }
   }, /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: "0 0 16px",
@@ -2231,10 +2340,13 @@ function Sapekkho() {
     className: "win-input",
     placeholder: "Task name",
     value: form.title,
-    onChange: e => setForm(f => ({
-      ...f,
-      title: e.target.value
-    })),
+    onChange: e => {
+      setForm(f => ({
+        ...f,
+        title: e.target.value
+      }));
+      if (e.target.value.trim()) setTitleError(false);
+    },
     onKeyDown: e => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -2242,9 +2354,10 @@ function Sapekkho() {
       }
     },
     style: {
-      marginBottom: 12,
+      marginBottom: titleError ? 0 : 12,
       fontSize: 16,
-      fontWeight: 500
+      fontWeight: 500,
+      borderBottomColor: titleError ? '#dc2626' : undefined
     },
     autoFocus: true
   }), /*#__PURE__*/React.createElement("div", {
@@ -2286,7 +2399,15 @@ function Sapekkho() {
       borderTopLeftRadius: 0,
       borderTopRightRadius: 0
     }
-  }), /*#__PURE__*/React.createElement("div", {
+  }), titleError && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: '#dc2626',
+      fontSize: 12,
+      fontWeight: 500,
+      marginBottom: 12,
+      marginTop: 4
+    }
+  }, "Please enter a task name."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -2302,15 +2423,27 @@ function Sapekkho() {
   }, "Add Reminder Time:"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 8
+      gap: 8,
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
     }
   }, /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "win-input",
+    style: {
+      width: '100%'
+    },
+    min: todayStr,
     value: form.tempDate,
     style: addReminderError ? {
-      borderBottomColor: '#dc2626'
-    } : {},
+      borderBottomColor: '#dc2626',
+      width: '100%'
+    } : {
+      width: '100%'
+    },
     onChange: e => {
       setForm(f => ({
         ...f,
@@ -2318,9 +2451,18 @@ function Sapekkho() {
       }));
       if (e.target.value) setAddReminderError(false);
     }
-  }), /*#__PURE__*/React.createElement("input", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "win-input",
+    style: {
+      width: '100%'
+    },
     value: form.tempTime,
     onChange: e => {
       setForm(f => ({
@@ -2328,12 +2470,27 @@ function Sapekkho() {
         tempTime: e.target.value
       }));
       if (form.tempDate) setAddReminderError(false);
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "win-btn primary",
-    style: {
-      whiteSpace: "nowrap"
     },
+    onKeyDown: e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!form.tempDate) {
+          setAddReminderError(true);
+          return;
+        }
+        const rStr = `${form.tempDate}${form.tempTime ? `T${form.tempTime}` : "T00:00"}`;
+        if (!form.reminders.includes(rStr)) {
+          setForm(f => ({
+            ...f,
+            reminders: [...f.reminders, rStr].sort(),
+            tempDate: "",
+            tempTime: ""
+          }));
+        }
+        setAddReminderError(false);
+      }
+    }
+  }), /*#__PURE__*/React.createElement("span", {
     onClick: () => {
       if (!form.tempDate) {
         setAddReminderError(true);
@@ -2344,19 +2501,29 @@ function Sapekkho() {
         setForm(f => ({
           ...f,
           reminders: [...f.reminders, rStr].sort(),
+          tempDate: "",
           tempTime: ""
         }));
       }
       setAddReminderError(false);
+    },
+    style: {
+      fontSize: 11,
+      color: '#3b82f6',
+      cursor: 'pointer',
+      userSelect: 'none',
+      marginTop: 4,
+      whiteSpace: 'nowrap',
+      alignSelf: 'flex-start'
     }
-  }, "+ Add")), addReminderError && /*#__PURE__*/React.createElement("div", {
+  }, "+ Add multiple reminder times"))), addReminderError && /*#__PURE__*/React.createElement("div", {
     style: {
       color: '#dc2626',
       fontSize: 12,
       fontWeight: 500,
       marginTop: 4
     }
-  }, "Please select a date first before adding a reminder.")), form.reminders.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Please select a date first.")), form.reminders.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -2423,10 +2590,16 @@ function Sapekkho() {
     }
   }, /*#__PURE__*/React.createElement("button", {
     className: "win-btn",
-    onClick: () => setShowAdd(false)
+    onClick: () => {
+      setShowAdd(false);
+      setTitleError(false);
+    }
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
     className: "win-btn primary",
-    onClick: addTask
+    onClick: addTask,
+    style: addBtnShake ? {
+      animation: 'shake 0.5s ease'
+    } : {}
   }, "Add Task")))), showHelpDialog && /*#__PURE__*/React.createElement("div", {
     className: "edit-overlay",
     onClick: e => {
