@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGoogleStatus: () => ipcRenderer.invoke('get-google-status'),
   syncTaskToGCal: (task) => ipcRenderer.invoke('sync-task-to-gcal', task),
   deleteGCalEvent: (eventId) => ipcRenderer.send('delete-gcal-event', eventId),
+  listGCalEvents: () => ipcRenderer.invoke('list-gcal-events'),
   
   // --- Startup Behavior IPC ---
   setStartupBehavior: (behavior) => ipcRenderer.send('set-startup-behavior', behavior),

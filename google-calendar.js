@@ -420,6 +420,25 @@ async function deleteCalendarEvent(eventId) {
   }
 }
 
+async function listCalendarEvents() {
+  if (!isAuthenticated()) return [];
+  const client = initOAuthClient();
+  const calendar = google.calendar({ version: 'v3', auth: client });
+  
+  try {
+    const calendarId = await getOrCreateSapekkhoCalendar();
+    const res = await calendar.events.list({
+      calendarId,
+      maxResults: 250,
+      singleEvents: true
+    });
+    return res.data.items || [];
+  } catch (error) {
+    console.error('Error listing calendar events:', error);
+    return [];
+  }
+}
+
 module.exports = {
   getAuthUrl,
   startAuthServer,
@@ -427,5 +446,6 @@ module.exports = {
   disconnectAccount,
   getUserEmail,
   syncTaskToCalendar,
-  deleteCalendarEvent
+  deleteCalendarEvent,
+  listCalendarEvents
 };

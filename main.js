@@ -42,22 +42,29 @@ function createWindow() {
       nodeIntegration: false,
     },
     backgroundColor: '#f3f4f6',
-    show: false, // show once ready to avoid white flash
+    show: true,
+  });
+
+  mainWindow.webContents.openDevTools();
+
+  // Capture renderer crashes and console errors for debugging
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[RENDERER CRASH]', details);
+  });
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[LOAD FAILED]', errorCode, errorDescription);
+  });
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const levels = ['verbose', 'info', 'warning', 'error'];
+    console.log(`[RENDERER ${levels[level] || level}] ${message} (${sourceId}:${line})`);
   });
 
   mainWindow.loadFile('index.html');
 
-  // Show window once DOM is ready (avoids white flash)
   mainWindow.once('ready-to-show', () => {
-    const behavior = store.get('startup-behavior', 'normal');
-    if (behavior === 'minimized') {
-      mainWindow.show();
-      mainWindow.minimize();
-    } else if (behavior === 'tray') {
-      // Don't show, wait for user to interact with tray
-    } else {
-      mainWindow.show();
-    }
+    // Always show on ready-to-show (debug: bypass startup-behavior)
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   // Minimise to tray instead of closing
@@ -244,6 +251,10 @@ ipcMain.handle('sync-task-to-gcal', async (event, task) => {
 
 ipcMain.on('delete-gcal-event', (event, eventId) => {
   googleCalendar.deleteCalendarEvent(eventId);
+});
+
+ipcMain.handle('list-gcal-events', async (event) => {
+  return await googleCalendar.listCalendarEvents();
 });
 
 // --- Startup Behavior IPC ---

@@ -1,13 +1,14 @@
 {
   "name": "sapekkho",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A simple Bengali-friendly task manager",
   "author": "Sapekkho Team",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --win --x64",
-    "dist:publish": "electron-builder --win --x64 -p always"
+    "build": "babel renderer.jsx --out-file renderer.js",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:publish": "npm run build && electron-builder --win --x64 -p always"
   },
   "build": {
     "appId": "com.sapekkho.app",
@@ -45,10 +46,19 @@
       "google-calendar.js",
       "google-credentials.json",
       "sw.js",
-      "notification-bell.png"
+      "notification-bell.png",
+      "renderer.js",
+      "react.production.min.js",
+      "react-dom.production.min.js",
+      "tabler-icons.min.css",
+      "hind-siliguri.css",
+      "fonts/**"
     ]
   },
   "devDependencies": {
+    "@babel/cli": "^8.0.4",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-react": "^8.0.1",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
   },
