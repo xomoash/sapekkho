@@ -318,22 +318,17 @@ app.whenReady().then(() => {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    // Ask the user if they want to restart now or later
-    const changelog = info.releaseNotes || 'No changelog available.';
-    const cleanChangelog = typeof changelog === 'string' 
-      ? changelog.replace(/<[^>]*>/g, '') 
-      : changelog;
+    // Send to renderer so it can show a custom styled modal
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', {
+        version: info.version,
+        releaseNotes: info.releaseNotes
+      });
+    }
+  });
 
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Update Ready — Sapekkho',
-      message: `Sapekkho v${info.version} has been downloaded.`,
-      detail: `What's new:\n${cleanChangelog}\n\nRestart now to apply the update, or it will be applied automatically next time you open the app.`,
-      buttons: ['Restart Now', 'Later'],
-      defaultId: 0
-    }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall();
-    });
+  ipcMain.on('install-update', () => {
+    autoUpdater.quitAndInstall();
   });
 
   autoUpdater.on('error', (err) => {

@@ -138,6 +138,7 @@ function Sapekkho() {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
   const [updateStatus, setUpdateStatus] = useState('');
+  const [updateReadyInfo, setUpdateReadyInfo] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
   const [showHelpDialog, setShowHelpDialog] = useState(false);
@@ -185,6 +186,11 @@ function Sapekkho() {
         window.electronAPI.onUpdateNotAvailable(() => {
           setUpdateStatus('You are on the latest version.');
           setIsCheckingUpdates(false);
+        });
+      }
+      if (window.electronAPI.onUpdateDownloaded) {
+        window.electronAPI.onUpdateDownloaded((info) => {
+          setUpdateReadyInfo(info);
         });
       }
     }
@@ -1653,6 +1659,66 @@ function Sapekkho() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
               <button className="win-btn primary" onClick={() => setShowHelpDialog(false)}>Got it!</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {updateReadyInfo && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", justifyContent: "center", alignItems: "center",
+          backdropFilter: "blur(2px)"
+        }}>
+          <div style={{
+            background: "var(--color-bg)", width: 500, borderRadius: 8,
+            boxShadow: "0 8px 30px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column",
+            border: "1px solid var(--color-border)", overflow: "hidden"
+          }}>
+            <div style={{
+              padding: "16px 20px", borderBottom: "1px solid var(--color-border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "var(--color-surface-hover)"
+            }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--color-text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
+                <CheckCircle size={20} style={{ color: "#3b82f6" }} />
+                Update Ready
+              </h2>
+            </div>
+            
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <p style={{ margin: 0, fontSize: 15, color: "var(--color-text-primary)", fontWeight: 500 }}>
+                Sapekkho v{updateReadyInfo.version} has been downloaded and is ready to install!
+              </p>
+              
+              {updateReadyInfo.releaseNotes && (
+                <div style={{
+                  background: "var(--color-bg)", borderRadius: 6, padding: 12,
+                  maxHeight: 200, overflowY: "auto", border: "1px solid var(--color-border)",
+                  fontSize: 13, color: "var(--color-text-secondary)", whiteSpace: "pre-wrap"
+                }}>
+                  {typeof updateReadyInfo.releaseNotes === 'string' 
+                    ? updateReadyInfo.releaseNotes.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&')
+                    : "Enhancements and bug fixes."}
+                </div>
+              )}
+              
+              <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-secondary)" }}>
+                Restart now to apply the update, or it will be applied automatically next time you open the app.
+              </p>
+            </div>
+            
+            <div style={{
+              padding: "16px 20px", borderTop: "1px solid var(--color-border)",
+              display: "flex", justifyContent: "flex-end", gap: 12,
+              background: "var(--color-surface-hover)"
+            }}>
+              <button className="win-btn" onClick={() => setUpdateReadyInfo(null)}>Later</button>
+              <button className="win-btn primary" onClick={() => {
+                setUpdateReadyInfo(null);
+                window.electronAPI.installUpdate();
+              }}>Restart Now</button>
             </div>
           </div>
         </div>

@@ -50,6 +50,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateNotAvailable: (callback) => {
     ipcRenderer.on('update-not-available', () => callback());
   },
+  onUpdateDownloaded: (callback) => {
+    ipcRenderer.on('update-downloaded', (event, info) => callback(info));
+  },
+  installUpdate: () => ipcRenderer.send('install-update'),
   openExternal: (url) => ipcRenderer.send('open-external', url),
   
   // Check if running inside Electron
